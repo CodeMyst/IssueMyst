@@ -1,6 +1,8 @@
 window.addEventListener("load", async () =>
 {
     let error = document.querySelector(".error");
+    let errorMessage = error.querySelector(".description");
+    let loading = document.querySelector(".loading");
     let repoElement = document.querySelector(".repo");
     let idElement = repoElement.querySelector(".id");
     let titleElement = repoElement.querySelector(".title a");
@@ -14,6 +16,16 @@ window.addEventListener("load", async () =>
 
         if (match)
         {
+            if (loading.classList.contains("hidden"))
+            {
+                loading.classList.remove("hidden");
+            }
+
+            if (!error.classList.contains("hidden"))
+            {
+                error.classList.add("hidden");
+            }
+
             let username = match[1];
             let repo = match[2];
 
@@ -33,7 +45,19 @@ window.addEventListener("load", async () =>
                 }
             });
 
-            let json = await res.json();
+            let json;
+
+            try
+            {
+                json = await res.json();
+            }
+            catch (e)
+            {
+                errorMessage.textContent = "invalid JSON returned from server, if this continues to happen contact @CodeMyst";
+                error.classList.remove("hidden");
+                loading.classList.add("hidden");
+                return;
+            }
 
             idElement.textContent = `[#${json.number}]`;
             titleElement.setAttribute("href", json.html_url);
@@ -55,6 +79,8 @@ window.addEventListener("load", async () =>
                 labelsElement.appendChild(l);
             }
 
+            loading.classList.add("hidden");
+
             repoElement.classList.remove("hidden");
             if (!error.classList.contains("hidden"))
             {
@@ -63,6 +89,7 @@ window.addEventListener("load", async () =>
         }
         else
         {
+            errorMessage.textContent = "invalid repo url";
             error.classList.remove("hidden");
             if (!repoElement.classList.contains("hidden"))
             {

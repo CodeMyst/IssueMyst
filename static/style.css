@@ -102,13 +102,18 @@ input[type=text]:focus
     display: none;
 }
 
-.error
+.block
 {
-    background-color: #ff4c4c;
+    background-color: #1d1d1d;
     padding: 0.5rem 1rem;
 }
 
-.error .description
+.error
+{
+    background-color: #ff4c4c;
+}
+
+.block .description
 {
     margin-bottom: 0;
 }
