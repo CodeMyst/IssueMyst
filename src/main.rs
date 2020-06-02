@@ -78,6 +78,7 @@ fn post_random_issue(repo: Json<RepoData>) -> Result<Json<Issue>, Status> {
         return Err(Status::InternalServerError);
     }
 
+    // if there is only 1 remaining in the rate limit return a server error
     if remaining <= 1 {
         return Err(Status::InternalServerError);
     }
@@ -94,6 +95,7 @@ fn post_random_issue(repo: Json<RepoData>) -> Result<Json<Issue>, Status> {
         }
     }
 
+    // if no issues found return 404
     if issues.len() == 0 {
         return Err(Status::NotFound);
     }
@@ -118,6 +120,7 @@ fn get_all_issues(repo: RepoData) -> Result<Vec<Issue>, String> {
 
     let mut issues: Vec<Issue> = Vec::new();
 
+    // go through pages until the number of issues returned is 0
     loop {
         let url = format!("https://api.github.com/repos/{}/{}/issues?page={}", repo.username, repo.repo, page);
         let res = client.get(&url)
@@ -183,6 +186,9 @@ fn get_rate_limit_remaining() -> Result<u64, String> {
     }
 }
 
+/**
+ * returns the personal access token from the pat.txt
+ */
 fn get_pat() -> std::io::Result<String> {
     let file = File::open("pat.txt")?;
     let mut reader = BufReader::new(file);
