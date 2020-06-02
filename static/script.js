@@ -45,6 +45,13 @@ window.addEventListener("load", async () =>
                 }
             });
 
+            if (res.status === 404) {
+                errorMessage.textContent = "repo doesn't exist or has no open issues.";
+                error.classList.remove("hidden");
+                loading.classList.add("hidden");
+                return;
+            }
+
             let json;
 
             try

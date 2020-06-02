@@ -84,10 +84,18 @@ fn post_random_issue(repo: Json<RepoData>) -> Result<Json<Issue>, Status> {
 
     let mut issues;
     
-    if let Ok(i) = get_all_issues(repo.into_inner()) {
-        issues = i;
-    } else {
-        return Err(Status::InternalServerError);
+    match get_all_issues(repo.into_inner()) {
+        Ok(i) => issues = i,
+        Err(e) => {
+            if e == "404" {
+                return Err(Status::NotFound);
+            }
+            return Err(Status::InternalServerError);
+        }
+    }
+
+    if issues.len() == 0 {
+        return Err(Status::NotFound);
     }
 
     let rand_index = rand::thread_rng().gen_range(0, issues.len()-1);
@@ -119,6 +127,10 @@ fn get_all_issues(repo: RepoData) -> Result<Vec<Issue>, String> {
 
         match res {
             Ok(res) => {
+                if res.status() == 404 {
+                    return Err("404".to_string());
+                }
+
                 if let Ok(res) = res.json::<Vec<Issue>>() {
                     if res.len() == 0
                     {
