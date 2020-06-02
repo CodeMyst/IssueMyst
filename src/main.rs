@@ -16,6 +16,14 @@ use std::{thread, time};
 use rand::Rng;
 
 const USER_AGENT: &'static str = "IssueMyst issue.myst.rs";
+const MAX_ISSUES: u64 = 300;
+
+#[derive(Deserialize)]
+#[derive(Serialize)]
+#[derive(Debug)]
+struct NIssues {
+    open_issues: u64,
+}
 
 #[derive(Deserialize)]
 #[derive(Serialize)]
@@ -83,9 +91,23 @@ fn post_random_issue(repo: Json<RepoData>) -> Result<Json<Issue>, Status> {
         return Err(Status::InternalServerError);
     }
 
+    let repo_data = repo.into_inner();
+
+    let n_issues;
+
+    if let Ok(n) = get_number_of_issues(&repo_data) {
+        n_issues = n;
+    } else {
+        return Err(Status::InternalServerError);
+    }
+
+    if n_issues > MAX_ISSUES {
+        return Err(Status::BadRequest);
+    }
+
     let mut issues;
     
-    match get_all_issues(repo.into_inner()) {
+    match get_all_issues(&repo_data) {
         Ok(i) => issues = i,
         Err(e) => {
             if e == "404" {
@@ -105,7 +127,7 @@ fn post_random_issue(repo: Json<RepoData>) -> Result<Json<Issue>, Status> {
     Ok(Json(issues.remove(rand_index)))
 }
 
-fn get_all_issues(repo: RepoData) -> Result<Vec<Issue>, String> {
+fn get_all_issues(repo: &RepoData) -> Result<Vec<Issue>, String> {
     let mut page = 1;
 
     let client = reqwest::blocking::Client::new();
@@ -153,6 +175,43 @@ fn get_all_issues(repo: RepoData) -> Result<Vec<Issue>, String> {
 
         page += 1;
         thread::sleep(time::Duration::from_millis(200))
+    }
+}
+
+fn get_number_of_issues(repo: &RepoData) -> Result<u64, String> {
+    let client = reqwest::blocking::Client::new();
+
+    let pat;
+
+    if let Ok(p) = get_pat() {
+        pat = p;
+    } else {
+        return Err("failed to get pat".to_string());
+    }
+
+    let url = format!("https://api.github.com/repos/{}/{}", repo.username, repo.repo);
+
+    let res = client.get(&url)
+        .header("Authorization", format!("Bearer {}", pat))
+        .header("User-Agent", USER_AGENT)
+        .send();
+
+    match res {
+        Ok(res) => {
+            if res.status() == 404 {
+                return Err("404".to_string());
+            }
+
+            if let Ok(res) = res.json::<NIssues>() {
+                return Ok(res.open_issues);
+            } else {
+                return Err("failed to get response".to_string());
+            }
+        },
+
+        Err(_) => {
+            return Err("failed to send request".to_string());
+        }
     }
 }
 

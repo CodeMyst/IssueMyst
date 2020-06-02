@@ -56,6 +56,12 @@ window.addEventListener("load", async () =>
                 loading.classList.add("hidden");
                 return;
             }
+            else if (res.status === 400) {
+                errorMessage.textContent = "repo has more than 300 issues, IssueMyst doesn't work on such repos because the rate limit will quickly be reached.";
+                error.classList.remove("hidden");
+                loading.classList.add("hidden");
+                return;
+            }
 
             let json;
 
