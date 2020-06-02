@@ -26,6 +26,11 @@ window.addEventListener("load", async () =>
                 error.classList.add("hidden");
             }
 
+            if (!repoElement.classList.contains("hidden"))
+            {
+                repoElement.classList.add("hidden");
+            }
+
             let username = match[1];
             let repo = match[2];
 

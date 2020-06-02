@@ -128,3 +128,24 @@ a:hover
 {
     color: #1EAEDB;
 }
+
+footer
+{
+    position: absolute;
+    bottom: 0;
+    text-align: center;
+    width: 100%;
+}
+
+@media screen and (max-width: 640px)
+{
+    .url-input
+    {
+        flex-direction: column;
+    }
+
+    input[type=text]
+    {
+        margin-right: 0;
+    }
+}
