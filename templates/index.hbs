@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IssueMyst</title>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Ubuntu&display=swap" rel="stylesheet"> 
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div id="container">
+        <h1>IssueMyst</h1>
+        <p class="description">don't know what issue to work on next? we'll pick a random one for you, just enter the repo url (works only for public repos).</p>
+
+        <div class="url-input">
+            <input type="text" name="repo-url" id="repo-url">
+            <input type="button" value="fetch a random issue">
+        </div>
+
+        <div class="repo hidden">
+            <div class="title">
+                <p><span class="id">[#98]</span><a href="#">autodetecting the language</a></p>
+            </div>
+            <div class="labels">
+                <div class="label">backend</div>
+                <div class="label">enhancement</div>
+            </div>
+            <div class="meta">
+                <p>opened 29 days ago by CodeMyst</p>
+            </div>
+        </div>
+
+        <div class="error hidden">
+            <p class="title">error</p>
+            <p class="description">invalid repo url</p>
+        </div>
+    </div>
+
+    <script src="/static/script.js"></script>
+</body>
+</html>
