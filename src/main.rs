@@ -22,6 +22,7 @@ const USER_AGENT: &'static str = "IssueMyst issue.myst.rs";
 #[derive(Debug)]
 struct Issue {
     url: String,
+    html_url: String,
     labels_url: String,
     number: u64,
     title: String,
