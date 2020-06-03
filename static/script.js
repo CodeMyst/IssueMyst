@@ -10,9 +10,9 @@ window.addEventListener("load", async () =>
 
     document.querySelector(".url-input input[type=button]").addEventListener("click", async () =>
     {
-        let url = document.getElementById("repo-url").value;
+        let url = document.getElementById("repo-url").value.trim();
 
-        let match = /https:\/\/(?:www\.)?github\.com\/(.*?)\/(.*?)(?:\/|\?|$)/.exec(url);
+        let match = /(?:https:\/\/(?:www\.)?github\.com\/)?(.*?)\/(.*?)(?:\/|\?|$)/.exec(url);
 
         if (match)
         {
