@@ -139,6 +139,11 @@ footer
 
 @media screen and (max-width: 640px)
 {
+    #container
+    {
+        margin-top: 20px;
+    }
+
     .url-input
     {
         flex-direction: column;
