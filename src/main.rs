@@ -3,31 +3,42 @@
 #[macro_use] extern crate rocket;
 extern crate reqwest;
 extern crate rand;
+extern crate serde_json;
 
 use serde::{ Deserialize, Serialize };
+use serde_json::value::Value;
 use rocket_contrib::templates::Template;
 use rocket_contrib::serve::StaticFiles;
-use rocket_contrib::json::Json;
-use rocket::http::Status;
+use rocket_contrib::json::{Json, JsonValue};
+use rocket::http::{Status, ContentType};
+use rocket::response::{Responder, Response};
+use rocket::request::Request;
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::BufReader;
 use std::{thread, time};
 use rand::Rng;
 
+const GITHUB_API: &'static str = "https://api.github.com/";
 const USER_AGENT: &'static str = "IssueMyst issue.myst.rs";
 const MAX_ISSUES: u64 = 300;
 
-#[derive(Deserialize)]
-#[derive(Serialize)]
-#[derive(Debug)]
+/// runs the function, if function returns an error it returns an error
+macro_rules! ret_on_error {
+    ($e:expr) => {
+        match $e {
+            Ok(n) => n,
+            Err(e) => return get_error_response(e)
+        }
+    };
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 struct NIssues {
     open_issues: u64,
 }
 
-#[derive(Deserialize)]
-#[derive(Serialize)]
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 struct Issue {
     url: String,
     html_url: String,
@@ -40,136 +51,119 @@ struct Issue {
 
 }
 
-#[derive(Deserialize)]
-#[derive(Serialize)]
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 struct User {
     login: String,
 }
 
-#[derive(Deserialize)]
-#[derive(Serialize)]
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 struct Label {
     name: String,
     color: String,
 }
 
-#[derive(Deserialize)]
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize, Debug)]
 struct RepoData {
     username: String,
     repo: String,
 }
 
-#[derive(Deserialize)]
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize, Debug)]
 struct RateLimit {
     rate: Rate,
 }
 
-#[derive(Deserialize)]
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize, Debug)]
 struct Rate {
     limit: u64,
     remaining: u64,
     reset: u64
 }
 
-#[post("/", data = "<repo>")]
-fn post_random_issue(repo: Json<RepoData>) -> Result<Json<Issue>, Status> {
-    let remaining;
+#[derive(Deserialize)]
+#[derive(Serialize)]
+struct ErrorMessage {
+    error: String,
+}
 
-    if let Ok(r) = get_rate_limit_remaining() {
-        remaining = r;
-    } else {
-        return Err(Status::InternalServerError);
+enum Error {
+    CantReadPat,
+    FailedToCreateRequest,
+    InvalidGitHubResponse,
+    NotFound,
+    RateLimitReached,
+    TooManyIssues,
+    NoIssues,
+}
+
+struct ApiResponse {
+    json: JsonValue,
+    status: Status
+}
+
+impl<'r> Responder<'r> for ApiResponse {
+    fn respond_to(self, req: &Request) -> rocket::response::Result<'r> {
+        Response::build_from(self.json.respond_to(&req).unwrap())
+            .status(self.status)
+            .header(ContentType::JSON)
+            .ok()
     }
+}
+
+#[post("/", data = "<repo>")]
+fn post_random_issue(repo: Json<RepoData>) -> ApiResponse {
+    let remaining = ret_on_error!(get_rate_limit_remaining());
 
     // if there is only 1 remaining in the rate limit return a server error
     if remaining <= 1 {
-        return Err(Status::InternalServerError);
+        return get_error_response(Error::RateLimitReached);
     }
 
     let repo_data = repo.into_inner();
 
-    let n_issues;
-
-    if let Ok(n) = get_number_of_issues(&repo_data) {
-        n_issues = n;
-    } else {
-        return Err(Status::InternalServerError);
-    }
+    let n_issues = ret_on_error!(get_number_of_issues(&repo_data));
 
     if n_issues > MAX_ISSUES {
-        return Err(Status::BadRequest);
+        return get_error_response(Error::TooManyIssues);
     }
 
-    let mut issues;
-    
-    match get_all_issues(&repo_data) {
-        Ok(i) => issues = i,
-        Err(e) => {
-            if e == "404" {
-                return Err(Status::NotFound);
-            }
-            return Err(Status::InternalServerError);
-        }
-    }
+    let mut issues = ret_on_error!(get_all_issues(&repo_data));
 
     // if no issues found return 404
     if issues.len() == 0 {
-        return Err(Status::NotFound);
+        return get_error_response(Error::NoIssues);
     }
 
     let rand_index = rand::thread_rng().gen_range(0, issues.len()-1);
 
-    Ok(Json(issues.remove(rand_index)))
+    ApiResponse { json: JsonValue(serde_json::to_value(issues.remove(rand_index)).unwrap()), status: Status::Ok }
 }
 
-fn get_all_issues(repo: &RepoData) -> Result<Vec<Issue>, String> {
+fn get_all_issues(repo: &RepoData) -> Result<Vec<Issue>, Error> {
     let mut page = 1;
-
-    let client = reqwest::blocking::Client::new();
-
-    let pat;
-
-    if let Ok(p) = get_pat() {
-        pat = p;
-    } else {
-        return Err("failed to get pat".to_string());
-    }
 
     let mut issues: Vec<Issue> = Vec::new();
 
     // go through pages until the number of issues returned is 0
     loop {
-        let url = format!("https://api.github.com/repos/{}/{}/issues?page={}", repo.username, repo.repo, page);
-        let res = client.get(&url)
-            .header("User-Agent", USER_AGENT)
-            .bearer_auth(&pat)
-            .send();
+        let url = format!("repos/{}/{}/issues?page={}", repo.username, repo.repo, page);
+        let res = send_github_request(url)?;
 
-        match res {
+        if res.status() == reqwest::StatusCode::NOT_FOUND {
+            return Err(Error::NotFound);
+        }
+
+        match res.json::<Vec<Issue>>() {
             Ok(res) => {
-                if res.status() == 404 {
-                    return Err("404".to_string());
+                if res.len() == 0 {
+                    return Ok(issues);
                 }
 
-                if let Ok(res) = res.json::<Vec<Issue>>() {
-                    if res.len() == 0
-                    {
-                        return Ok(issues);
-                    }
-
-                    issues.extend(res);
-                } else {
-                    return Err("failed to get response".to_string());
-                }
+                issues.extend(res);
             },
-
-            Err(_) => {
-                return Err("failed to send request".to_string());
+            Err(error) => {
+                println!("{}", error);
+                return Err(Error::InvalidGitHubResponse);
             }
         }
 
@@ -178,92 +172,109 @@ fn get_all_issues(repo: &RepoData) -> Result<Vec<Issue>, String> {
     }
 }
 
-fn get_number_of_issues(repo: &RepoData) -> Result<u64, String> {
-    let client = reqwest::blocking::Client::new();
+// gets the number of open issues a repo has
+fn get_number_of_issues(repo: &RepoData) -> Result<u64, Error> {
+    let url = format!("repos/{}/{}", repo.username, repo.repo);
 
-    let pat;
+    let res = send_github_request(url)?;
 
-    if let Ok(p) = get_pat() {
-        pat = p;
-    } else {
-        return Err("failed to get pat".to_string());
+    if res.status() == reqwest::StatusCode::NOT_FOUND {
+        return Err(Error::NotFound);
     }
 
-    let url = format!("https://api.github.com/repos/{}/{}", repo.username, repo.repo);
+    match res.json::<NIssues>() {
+        Ok(res) => return Ok(res.open_issues),
+        Err(error) => {
+            println!("{}", error);
+            return Err(Error::InvalidGitHubResponse);
+        }
+    };
+}
 
+/// gets the remaining amount of requests left before reaching the github rate limit
+fn get_rate_limit_remaining() -> Result<u64, Error> {
+    let res = send_github_request("rate_limit".to_string())?;
+
+    match res.json::<RateLimit>() {
+        Ok(r) => return Ok(r.rate.remaining),
+        Err(error) => {
+            println!("{}", error);
+            return Err(Error::InvalidGitHubResponse);
+        }
+    };
+}
+
+/// sends a github api request
+/// 
+/// # Arguments
+/// 
+/// * endpoint - github api endpoint, gets appended to the github api url
+fn send_github_request(endpoint: String) -> Result<reqwest::blocking::Response, Error> {
+    let url = format!("{}{}", GITHUB_API, endpoint);
+
+    let pat = get_pat()?;
+
+    let client = reqwest::blocking::Client::new();
     let res = client.get(&url)
         .header("User-Agent", USER_AGENT)
         .bearer_auth(pat)
         .send();
 
     match res {
-        Ok(res) => {
-            if res.status() == 404 {
-                return Err("404".to_string());
-            }
-
-            if let Ok(res) = res.json::<NIssues>() {
-                return Ok(res.open_issues);
-            } else {
-                return Err("failed to get response".to_string());
-            }
-        },
-
-        Err(_) => {
-            return Err("failed to send request".to_string());
+        Ok(res) => return Ok(res),
+        Err(error) => {
+            println!("{}", error);
+            return Err(Error::FailedToCreateRequest);
         }
-    }
-}
-
-fn get_rate_limit_remaining() -> Result<u64, String> {
-    let pat;
-
-    if let Ok(p) = get_pat() {
-        pat = p;
-    } else {
-        return Err("failed to get pat".to_string());
-    }
-
-    let client = reqwest::blocking::Client::new();
-    let res = client.get("https://api.github.com/rate_limit")
-        .header("User-Agent", USER_AGENT)
-        .bearer_auth(pat)
-        .send();
-
-    match res {
-        Ok (res) => {
-            if let Ok(res) = res.json::<RateLimit>() {
-                return Ok(res.rate.remaining);
-            } else {
-                return Err("failed to get response".to_string());
-            }
-        },
-
-        Err(_) => {
-            return Err("failed to send request".to_string());
-        }
-    }
+    };
 }
 
 /**
  * returns the personal access token from the pat.txt
  */
-fn get_pat() -> std::io::Result<String> {
-    let file = File::open("pat.txt")?;
+fn get_pat() -> Result<String, Error> {
+    let file = File::open("pat.txt");
+
+    let file = match file {
+        Ok(f) => f,
+        Err(error) => {
+            println!("{}", error);
+            return Err(Error::CantReadPat);
+        }
+    };
+
     let mut reader = BufReader::new(file);
     let mut contents = String::new();
-    reader.read_to_string(&mut contents)?;
 
-    // return trailing new line
-    if contents.ends_with("\n") {
-        contents.pop();
-
-        if contents.ends_with("\r") {
-            contents.pop();
+    match reader.read_to_string(&mut contents) {
+        Ok(_) => {},
+        Err(e) => {
+            println!("{}", e);
+            return Err(Error::CantReadPat);
         }
-    }
+    };
 
-    Ok(contents)
+    Ok(contents.trim().to_string())
+}
+
+fn get_error_response(error: Error) -> ApiResponse {
+    let message = match error {
+        Error::CantReadPat => "server failed to read the PAT".to_string(),
+        Error::FailedToCreateRequest => "server failed to create a request".to_string(),
+        Error::InvalidGitHubResponse => "got an invalid response from github".to_string(),
+        Error::NotFound => "repo is either private or doesn't exist".to_string(),
+        Error::NoIssues => "repo has no open issues".to_string(),
+        Error::RateLimitReached => "the app has reached github's rate limit, try again in an hour".to_string(),
+        Error::TooManyIssues => format!("the repo has more than {} issues, this is limited so the rate limit by github isn't reached so fast.", MAX_ISSUES)
+    };
+
+    let status = match error {
+        Error::NotFound | Error::NoIssues => Status::NotFound,
+        Error::RateLimitReached => Status::TooManyRequests,
+        _ => Status::InternalServerError,
+    };
+
+    ApiResponse { json: JsonValue(Value::String(message)), status: status }
 }
 
 #[get("/")]

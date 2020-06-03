@@ -1,12 +1,20 @@
+let error;
+let errorMessage;
+let loading;
+let repoElement;
+let idElement;
+let titleElement;
+let labelsElement;
+
 window.addEventListener("load", async () =>
 {
-    let error = document.querySelector(".error");
-    let errorMessage = error.querySelector(".description");
-    let loading = document.querySelector(".loading");
-    let repoElement = document.querySelector(".repo");
-    let idElement = repoElement.querySelector(".id");
-    let titleElement = repoElement.querySelector(".title a");
-    let labelsElement = repoElement.querySelector(".labels");
+    error = document.querySelector(".error");
+    errorMessage = error.querySelector(".description");
+    loading = document.querySelector(".loading");
+    repoElement = document.querySelector(".repo");
+    idElement = repoElement.querySelector(".id");
+    titleElement = repoElement.querySelector(".title a");
+    labelsElement = repoElement.querySelector(".labels");
 
     document.querySelector(".url-input input[type=button]").addEventListener("click", async () =>
     {
@@ -16,20 +24,11 @@ window.addEventListener("load", async () =>
 
         if (match)
         {
-            if (loading.classList.contains("hidden"))
-            {
-                loading.classList.remove("hidden");
-            }
+            displayLoading();
 
-            if (!error.classList.contains("hidden"))
-            {
-                error.classList.add("hidden");
-            }
+            hideError();
 
-            if (!repoElement.classList.contains("hidden"))
-            {
-                repoElement.classList.add("hidden");
-            }
+            hideIssue();
 
             let username = match[1];
             let repo = match[2];
@@ -50,16 +49,9 @@ window.addEventListener("load", async () =>
                 }
             });
 
-            if (res.status === 404) {
-                errorMessage.textContent = "repo doesn't exist or has no open issues.";
-                error.classList.remove("hidden");
-                loading.classList.add("hidden");
-                return;
-            }
-            else if (res.status === 400) {
-                errorMessage.textContent = "repo has more than 300 issues, IssueMyst doesn't work on such repos because the rate limit will quickly be reached.";
-                error.classList.remove("hidden");
-                loading.classList.add("hidden");
+            if (res.status !== 200)
+            {
+                showError(await res.json());
                 return;
             }
 
@@ -71,9 +63,7 @@ window.addEventListener("load", async () =>
             }
             catch (e)
             {
-                errorMessage.textContent = "invalid JSON returned from server, if this continues to happen contact @CodeMyst";
-                error.classList.remove("hidden");
-                loading.classList.add("hidden");
+                showError("invalid JSON returned from server, if this continues to happen contact @CodeMyst");
                 return;
             }
 
@@ -97,22 +87,16 @@ window.addEventListener("load", async () =>
                 labelsElement.appendChild(l);
             }
 
-            loading.classList.add("hidden");
+            hideLoading();
 
-            repoElement.classList.remove("hidden");
-            if (!error.classList.contains("hidden"))
-            {
-                error.classList.add("hidden");
-            }
+            showIssue();
+
+            hideError();
         }
         else
         {
-            errorMessage.textContent = "invalid repo url";
-            error.classList.remove("hidden");
-            if (!repoElement.classList.contains("hidden"))
-            {
-                repoElement.classList.add("hidden");
-            }
+            showError("invalid repo url");
+            hideIssue();
         }
     });
 });
@@ -129,4 +113,45 @@ function getColor(bgColor)
     let blue = parseInt(bgColor.substring(5, 7), 16);
 
     return (red * 0.299 + green * 0.587 + blue * 0.114) <= 186;
+}
+
+function displayLoading()
+{
+    if (loading.classList.contains("hidden"))
+    {
+        loading.classList.remove("hidden");
+    }
+}
+
+function hideLoading()
+{
+    loading.classList.add("hidden");
+}
+
+function showError(message)
+{
+    errorMessage.textContent = message;
+    error.classList.remove("hidden");
+    hideLoading();
+}
+
+function hideError()
+{
+    if (!error.classList.contains("hidden"))
+    {
+        error.classList.add("hidden");
+    }
+}
+
+function showIssue()
+{
+    repoElement.classList.remove("hidden");
+}
+
+function hideIssue()
+{
+    if (!repoElement.classList.contains("hidden"))
+    {
+        repoElement.classList.add("hidden");
+    }
 }

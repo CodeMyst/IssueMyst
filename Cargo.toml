@@ -10,6 +10,7 @@ edition = "2018"
 rocket = "0.4.5"
 serde = { version = "1.0", features = ["derive"] }
 rand = "0.7.3"
+serde_json = "1.0.53"
 
 [dependencies.rocket_contrib]
 version = "0.4.5"
