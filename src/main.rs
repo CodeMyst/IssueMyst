@@ -146,8 +146,8 @@ fn get_all_issues(repo: &RepoData) -> Result<Vec<Issue>, String> {
     loop {
         let url = format!("https://api.github.com/repos/{}/{}/issues?page={}", repo.username, repo.repo, page);
         let res = client.get(&url)
-            .header("Authorization", format!("Bearer {}", pat))
             .header("User-Agent", USER_AGENT)
+            .bearer_auth(&pat)
             .send();
 
         match res {
@@ -192,8 +192,8 @@ fn get_number_of_issues(repo: &RepoData) -> Result<u64, String> {
     let url = format!("https://api.github.com/repos/{}/{}", repo.username, repo.repo);
 
     let res = client.get(&url)
-        .header("Authorization", format!("Bearer {}", pat))
         .header("User-Agent", USER_AGENT)
+        .bearer_auth(pat)
         .send();
 
     match res {
@@ -226,8 +226,8 @@ fn get_rate_limit_remaining() -> Result<u64, String> {
 
     let client = reqwest::blocking::Client::new();
     let res = client.get("https://api.github.com/rate_limit")
-        .header("Authorization", format!("Bearer {}", pat))
         .header("User-Agent", USER_AGENT)
+        .bearer_auth(pat)
         .send();
 
     match res {
@@ -253,6 +253,15 @@ fn get_pat() -> std::io::Result<String> {
     let mut reader = BufReader::new(file);
     let mut contents = String::new();
     reader.read_to_string(&mut contents)?;
+
+    // return trailing new line
+    if contents.ends_with("\n") {
+        contents.pop();
+
+        if contents.ends_with("\r") {
+            contents.pop();
+        }
+    }
 
     Ok(contents)
 }
