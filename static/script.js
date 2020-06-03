@@ -5,6 +5,7 @@ let repoElement;
 let idElement;
 let titleElement;
 let labelsElement;
+let number;
 
 window.addEventListener("load", async () =>
 {
@@ -15,6 +16,7 @@ window.addEventListener("load", async () =>
     idElement = repoElement.querySelector(".id");
     titleElement = repoElement.querySelector(".title a");
     labelsElement = repoElement.querySelector(".labels");
+    number = document.querySelector("span.n");
 
     document.querySelector(".url-input input[type=button]").addEventListener("click", async () =>
     {
@@ -92,6 +94,8 @@ window.addEventListener("load", async () =>
             showIssue();
 
             hideError();
+
+            increment();
         }
         else
         {
@@ -113,6 +117,13 @@ function getColor(bgColor)
     let blue = parseInt(bgColor.substring(5, 7), 16);
 
     return (red * 0.299 + green * 0.587 + blue * 0.114) <= 186;
+}
+
+function increment()
+{
+    let n = Number(number.textContent);
+    n++;
+    number.textContent = n;
 }
 
 function displayLoading()

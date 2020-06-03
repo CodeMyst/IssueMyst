@@ -13,6 +13,7 @@ use rocket_contrib::json::{Json, JsonValue};
 use rocket::http::{Status, ContentType};
 use rocket::response::{Responder, Response};
 use rocket::request::Request;
+use std::path::Path;
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::BufReader;
@@ -101,6 +102,11 @@ struct ApiResponse {
     status: Status
 }
 
+#[derive(Serialize)]
+struct PageContext {
+    amount: u64,
+}
+
 impl<'r> Responder<'r> for ApiResponse {
     fn respond_to(self, req: &Request) -> rocket::response::Result<'r> {
         Response::build_from(self.json.respond_to(&req).unwrap())
@@ -133,6 +139,8 @@ fn post_random_issue(repo: Json<RepoData>) -> ApiResponse {
     if issues.len() == 0 {
         return get_error_response(Error::NoIssues);
     }
+
+    increment_amounts().unwrap();
 
     let rand_index = rand::thread_rng().gen_range(0, issues.len()-1);
 
@@ -257,6 +265,34 @@ fn get_pat() -> Result<String, Error> {
     Ok(contents.trim().to_string())
 }
 
+fn create_amounts() -> std::io::Result<()> {
+    if Path::new("amounts.txt").exists() {
+        return Ok(());
+    }
+
+    let mut file = File::create("amounts.txt")?;
+    file.write_all("0".as_bytes())?;
+
+    Ok(())
+}
+
+fn get_amounts() -> std::io::Result<u64> {
+    let mut file = File::open("amounts.txt")?;
+    let mut contents = String::new();
+    file.read_to_string(&mut contents)?;
+    
+    Ok(contents.parse::<u64>().unwrap())
+}
+
+fn increment_amounts() -> std::io::Result<()> {
+    let mut amnts = get_amounts()?;
+    amnts += 1;
+    let mut file = File::create("amounts.txt")?;
+    file.write_all(amnts.to_string().as_bytes())?;
+
+    Ok(())
+}
+
 fn get_error_response(error: Error) -> ApiResponse {
     let message = match error {
         Error::CantReadPat => "server failed to read the PAT".to_string(),
@@ -279,9 +315,12 @@ fn get_error_response(error: Error) -> ApiResponse {
 
 #[get("/")]
 fn index() -> Template {
-    Template::render("index", &())
+    let context = PageContext { amount: get_amounts().unwrap() };
+    Template::render("index", &context)
 }
 
 fn main() {
+    create_amounts().unwrap();
+
     rocket::ignite().mount("/", routes![index, post_random_issue]).mount("/static", StaticFiles::from("static")).attach(Template::fairing()).launch();
 }
